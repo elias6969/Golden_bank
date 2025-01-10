@@ -1,0 +1,69 @@
+﻿@page "/login"
+@using MyBlankBlazor.Services
+@inject AccountState AccountState
+@inject NavigationManager NavManager
+@inject IHttpClientFactory HttpClientFactory
+
+@*
+    This script handles the login functionality for the application.
+    Users can enter their username and password to log in.
+    Upon successful login, the user is redirected to the transactions page.
+    If the login fails, an error message is displayed.
+*@
+
+<h3>Login</h3>
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+        <p class="text-danger">@ErrorMessage</p>
+}
+
+<form @onsubmit="HandleLogin">
+    <div class="mb-3">
+        <label>Username:</label>
+        <input class="form-control" @bind="Username" />
+    </div>
+    <div class="mb-3">
+        <label>Password:</label>
+        <input type="password" class="form-control" @bind="Password" />
+    </div>
+    <button type="submit" class="btn btn-primary">Login</button>
+</form>
+
+@code {
+    private string Username = "";
+    private string Password = "";
+    private string ErrorMessage = "";
+
+    private async Task HandleLogin()
+    {
+        var httpClient = HttpClientFactory.CreateClient("PhpApi");
+        var payload = new { username = Username, password = Password };
+
+        var response = await httpClient.PostAsJsonAsync("login.php", payload);
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<LoginResult>();
+            if (result != null && result.success == true)
+            {
+                AccountState.AccountId = result.account_id;
+                NavManager.NavigateTo("/transactions");
+            }
+            else
+            {
+                ErrorMessage = "No account found with that username/password.";
+            }
+        }
+        else
+        {
+            ErrorMessage = "Login request failed. Try again.";
+        }
+    }
+
+    private class LoginResult
+    {
+        public bool success { get; set; }
+        public int account_id { get; set; }
+        public string error { get; set; }
+    }
+}

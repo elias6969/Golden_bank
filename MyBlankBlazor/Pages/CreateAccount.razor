@@ -1,0 +1,80 @@
+﻿@page "/create-account"
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager NavManager
+
+@*
+    This script handles the account creation functionality for the application.
+    Users can enter their username, password, and name to create a new account.
+
+    The form includes:
+    - A text input for the username.
+    - A password input for the password.
+    - A text input for the user's name.
+    - A submit button to create the account.
+
+    The HandleCreate method is triggered when the form is submitted.
+    It sends a POST request to the createAccount.php endpoint with the entered details.
+    If the response indicates success, the user is redirected to the login page.
+    If the response indicates failure, an error message is displayed.
+*@
+
+<h3>Create Account</h3>
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+        <p class="text-danger">@ErrorMessage</p>
+}
+
+<form @onsubmit="HandleCreate">
+    <div class="mb-3">
+        <label>Username:</label>
+        <input class="form-control" @bind="Username" />
+    </div>
+    <div class="mb-3">
+        <label>Password:</label>
+        <input type="password" class="form-control" @bind="Password" />
+    </div>
+    <div class="mb-3">
+        <label>Name:</label>
+        <input class="form-control" @bind="Name" />
+    </div>
+    <button type="submit" class="btn btn-success">Create Account</button>
+</form>
+
+@code {
+    private string Username = "";
+    private string Password = "";
+    private string Name = "";
+    private string ErrorMessage = "";
+
+    private async Task HandleCreate()
+    {
+        var httpClient = HttpClientFactory.CreateClient("PhpApi");
+        var payload = new { username = Username, password = Password, name = Name };
+
+        var response = await httpClient.PostAsJsonAsync("createAccount.php", payload);
+        if (response.IsSuccessStatusCode)
+        {
+            var result = await response.Content.ReadFromJsonAsync<CreateAccountResult>();
+            if (result != null && result.success == true)
+            {
+                // Go to /login or auto-login
+                NavManager.NavigateTo("/login");
+            }
+            else
+            {
+                ErrorMessage = result?.error ?? "Failed to create account.";
+            }
+        }
+        else
+        {
+            ErrorMessage = "Create account request failed. Try again.";
+        }
+    }
+
+    private class CreateAccountResult
+    {
+        public bool success { get; set; }
+        public string error { get; set; }
+    }
+}

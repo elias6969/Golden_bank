@@ -1,0 +1,153 @@
+﻿@page "/transactions"
+@using System.Net.Http.Json
+@using MyBlankBlazor.Services
+@inject IHttpClientFactory HttpClientFactory
+@inject AccountState AccountState
+
+@*
+    This script handles the transaction functionality and the UI for how it will look and work.
+    It is currently connected to another script called transaction.php, which processes the transactions on the server side.
+    You can find the transaction.php script in the GitHub repository.
+
+    The form allows users to select a transaction type (deposit or withdrawal) and enter an amount.
+    When the form is submitted, it sends a POST request to transaction.php with the transaction details.
+    The response from the server is used to update the transaction message and refresh the transaction history.
+
+    The transaction history is displayed in a table, showing the type, amount, and timestamp of each transaction.
+    If the user is not logged in (AccountId is null), a message is displayed prompting them to log in first.
+*@
+
+<h3>Transactions Page</h3>
+<form @onsubmit="HandleTransaction">
+    <label>Type:</label>
+    <select @bind="TransactionType">
+        <option value="deposit">Deposit</option>
+        <option value="withdrawal">Withdrawal</option>
+    </select>
+    <label>Amount:</label>
+    <input type="number" step="0.01" @bind="Amount" />
+    <button type="submit">Submit</button>
+</form>
+
+<p>@TransactionMessage</p>
+
+<h4>Transaction History for Account @AccountState.AccountId</h4>
+@if (TransactionsList == null)
+{
+        <p>Loading transactions...</p>
+}
+else
+{
+        <table>
+            <thead>
+                <tr>
+                    <th>Type </th>
+                    <th>Amount </th>
+                    <th>Timestamp </th>
+                </tr>
+            </thead>
+            <tbody>
+            @foreach (var txn in TransactionsList)
+            {
+                    <tr>
+                        <td>@txn.type</td>
+                        <td>@txn.amount</td>
+                        <td>@txn.timestamp</td>
+                    </tr>
+            }
+            </tbody>
+        </table>
+}
+
+@code {
+    private string TransactionType = "deposit";
+    private decimal Amount = 0.00M;
+    private string TransactionMessage = "";
+    private List<TransactionRecord>? TransactionsList;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // If the user hasn't "logged in", AccountId might be null => redirect or show a message
+        if (AccountState.AccountId == null)
+        {
+            TransactionMessage = "Please log in first!";
+            return;
+        }
+
+        await LoadTransactions();
+    }
+
+    private async Task HandleTransaction()
+    {
+        if (AccountState.AccountId == null)
+        {
+            TransactionMessage = "No account ID. Please log in first.";
+            return;
+        }
+
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("PhpApi");
+            // POST new transaction
+            var payload = new
+            {
+                account_id = AccountState.AccountId,
+                type = TransactionType,
+                amount = Amount
+            };
+
+            var response = await httpClient.PostAsJsonAsync("transaction.php", payload);
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<Dictionary<string, object>>();
+                if (result != null)
+                {
+                    if (result.ContainsKey("new_balance"))
+                    {
+                        TransactionMessage = $"Transaction successful! New balance: {result["new_balance"]}";
+                    }
+                    else if (result.ContainsKey("error"))
+                    {
+                        TransactionMessage = $"Error: {result["error"]}";
+                    }
+                }
+            }
+            else
+            {
+                TransactionMessage = "Transaction failed. Please try again.";
+            }
+
+            // Refresh transactions
+            await LoadTransactions();
+        }
+        catch (Exception ex)
+        {
+            TransactionMessage = $"An error occurred: {ex.Message}";
+        }
+    }
+
+    private async Task LoadTransactions()
+    {
+        try
+        {
+            var httpClient = HttpClientFactory.CreateClient("PhpApi");
+            var result = await httpClient.GetFromJsonAsync<List<TransactionRecord>>(
+                $"transaction.php?account_id={AccountState.AccountId}"
+            );
+            TransactionsList = result ?? new List<TransactionRecord>();
+        }
+        catch (Exception ex)
+        {
+            TransactionMessage = $"Error loading transactions: {ex.Message}";
+        }
+    }
+
+    private class TransactionRecord
+    {
+        public int id { get; set; }
+        public int account_id { get; set; }
+        public string? type { get; set; }
+        public decimal amount { get; set; }
+        public string? timestamp { get; set; }
+    }
+}
